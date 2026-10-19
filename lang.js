@@ -1,7 +1,7 @@
 const LANG = {
   // Лобби
   title: "морской бой",
-  lobbyTitle: "ыэыъъ",
+  lobbyTitle: "ыжыцйъъ",
   lobbyDesc: "создай игру или зайди по коду",
   btnCreate: "создать игру",
   btnJoin: "войти",
