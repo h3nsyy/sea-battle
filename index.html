@@ -6,114 +6,295 @@
 <title>Морской бой — Онлайн</title>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* ===== ТЕМЫ (Черная / Белая) ===== */
   :root {
-    --bg: #0a0f1a; --panel: #111b2b; --line: #22364d; --text: #c9d9ec;
-    --muted: #5c7a99; --accent: #2f81f7; --hit: #e34c4c;
-    --cell: clamp(18px, 5.5vw, 30px); --lab: 16px; --gap: 2px;
+    /* Светлая тема (по умолчанию) */
+    --bg: #f0f0f0;
+    --panel: #ffffff;
+    --text: #222222;
+    --muted: #666666;
+    --border: #cccccc;
+    --accent: #000000;
+    --accent-text: #ffffff;
+    --cell-bg: #e0e0e0;
+    --cell-hover: #d0d0d0;
+    --ship: #666666;
+    --hit: #d32f2f;
+    --miss: #999999;
+    --shadow: rgba(0, 0, 0, 0.1);
   }
+
+  [data-theme="dark"] {
+    /* Темная тема */
+    --bg: #121212;
+    --panel: #1e1e1e;
+    --text: #e0e0e0;
+    --muted: #888888;
+    --border: #333333;
+    --accent: #ffffff;
+    --accent-text: #000000;
+    --cell-bg: #2c2c2c;
+    --cell-hover: #3c3c3c;
+    --ship: #888888;
+    --hit: #f44336;
+    --miss: #555555;
+    --shadow: rgba(0, 0, 0, 0.5);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif;
-    display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 16px;
-    -webkit-tap-highlight-color: transparent; user-select: none;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: background 0.3s, color 0.3s;
   }
-  .app { width: 100%; max-width: 880px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
-  h1 { font-size: 20px; color: var(--accent); letter-spacing: 1px; text-align: center; }
-  .screen { display: none; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
+
+  .app {
+    width: 100%;
+    max-width: 880px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    position: relative;
+  }
+
+  /* ===== ШАПКА ===== */
+  .header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* Кнопка темы */
+  .theme-toggle {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 20px;
+    transition: all 0.2s;
+  }
+  .theme-toggle:hover { background: var(--cell-hover); }
+
+  /* ===== ЭКРАНЫ ===== */
+  .screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
+    animation: fadeIn 0.3s ease;
+  }
   .screen.active { display: flex; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-  .board-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-  .board-title { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; }
-  .board-title.enemy { color: #f0883e; }
-
-  .board {
-    display: grid; grid-template-columns: var(--lab) repeat(10, var(--cell));
-    grid-template-rows: var(--lab) repeat(10, var(--cell)); gap: var(--gap);
-    background: #0d1622; padding: 6px; border-radius: 8px; border: 1px solid var(--line);
+  /* ===== КАРТОЧКИ (Лобби, Ожидание) ===== */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 24px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 4px 20px var(--shadow);
   }
-  .label { display: flex; align-items: center; justify-content: center; font-size: 10px; color: #3e5a73; font-weight: 700; }
-  .cell { background: #162435; border-radius: 2px; cursor: pointer; position: relative; transition: background 0.1s; }
-  .cell:hover:not(.miss):not(.hit):not(.sunk) { background: #1e3147; }
-  .cell.ship { background: #2f81f7; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
-  .cell.ship.sunk { background: #7a2424; }
-  .cell.miss::after { content: ''; position: absolute; inset: 35%; background: #3d5d7a; border-radius: 50%; }
-  .cell.hit::after { content: ''; position: absolute; inset: 25%; background: var(--hit); border-radius: 50%; box-shadow: 0 0 6px var(--hit); }
-  .cell.disabled { pointer-events: none; opacity: 0.6; }
+  .card h2 { font-size: 20px; font-weight: 700; }
+  .card p { color: var(--muted); font-size: 14px; line-height: 1.5; }
 
-  .fleet-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
-  .fleet-item { display: flex; gap: 2px; align-items: center; padding: 4px 8px; border-radius: 4px; background: var(--panel); border: 1px solid transparent; opacity: 0.4; }
-  .fleet-item.current { opacity: 1; border-color: var(--accent); background: #1a2d45; }
-  .fleet-item .dot { width: 10px; height: 10px; background: #2f81f7; border-radius: 1px; }
+  /* ===== ИНПУТЫ И КНОПКИ ===== */
+  .input-group { display: flex; gap: 8px; }
+  input[type="text"] {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 16px;
+    text-align: center;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  input[type="text"]:focus { outline: none; border-color: var(--text); }
 
-  .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
   .btn {
-    background: var(--panel); color: var(--text); border: 1px solid var(--line);
-    padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
   }
-  .btn:hover:not(:disabled) { background: #1c2e45; }
+  .btn:hover:not(:disabled) { background: var(--cell-hover); }
   .btn:active:not(:disabled) { transform: scale(0.97); }
   .btn:disabled { opacity: 0.3; cursor: not-allowed; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .btn.primary:hover:not(:disabled) { background: #1f6cd8; }
-
-  .lobby-card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    padding: 32px 24px; text-align: center; display: flex; flex-direction: column; gap: 16px; max-width: 340px; width: 100%;
+  .btn.primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
   }
-  .lobby-card h2 { font-size: 20px; }
-  .lobby-card p { color: var(--muted); font-size: 14px; line-height: 1.4; }
-  .input-group { display: flex; gap: 8px; }
-  .input-group input {
-    flex: 1; background: #0d1622; border: 1px solid var(--line); border-radius: 6px;
-    padding: 8px 12px; color: var(--text); font-size: 16px; text-align: center; text-transform: uppercase;
-  }
-  .input-group input:focus { outline: none; border-color: var(--accent); }
+  .btn.primary:hover:not(:disabled) { opacity: 0.8; }
 
-  .pass-card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    padding: 32px 24px; text-align: center; display: flex; flex-direction: column; gap: 16px; max-width: 340px; width: 100%;
+  /* ===== ПОЛЯ ===== */
+  .board-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .board-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-weight: 700;
+    text-align: center;
   }
-  .pass-card h2 { font-size: 20px; }
-  .pass-card p { color: var(--muted); font-size: 14px; line-height: 1.4; }
+  .board-title.enemy { color: var(--hit); }
 
+  .board {
+    display: grid;
+    grid-template-columns: 16px repeat(10, var(--cell, 28px));
+    grid-template-rows: 16px repeat(10, var(--cell, 28px));
+    gap: 2px;
+    background: var(--bg);
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .label {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--muted); font-weight: 700;
+  }
+
+  .cell {
+    background: var(--cell-bg);
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.1s;
+  }
+  .cell:hover:not(.miss):not(.hit):not(.sunk) { background: var(--cell-hover); }
+  .cell.ship { background: var(--ship); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+  .cell.ship.sunk { background: var(--hit); }
+
+  .cell.miss::after {
+    content: ''; position: absolute; inset: 35%;
+    background: var(--miss); border-radius: 50%;
+  }
+  .cell.hit::after {
+    content: ''; position: absolute; inset: 25%;
+    background: var(--hit); border-radius: 50%;
+    box-shadow: 0 0 6px var(--hit);
+  }
+  .cell.disabled { pointer-events: none; opacity: 0.6; }
+
+  /* ===== ФЛОТ (Список кораблей) ===== */
+  .fleet-list {
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+    margin-top: 4px; max-width: 400px;
+  }
+  .fleet-item {
+    display: flex; gap: 2px; align-items: center;
+    padding: 4px 8px; border-radius: 4px;
+    background: var(--panel); border: 1px solid transparent;
+    opacity: 0.3; transition: opacity 0.2s;
+  }
+  .fleet-item.current { opacity: 1; border-color: var(--border); }
+  .fleet-item .dot { width: 10px; height: 10px; background: var(--ship); border-radius: 1px; }
+
+  /* ===== СЕТКА БОЯ ===== */
+  .battle-layout {
+    display: flex; gap: 24px; flex-wrap: wrap; justify-content: center;
+  }
+  @media (max-width: 760px) { .battle-layout { gap: 16px; flex-direction: column; } }
+
+  /* ===== ОВЕРЛЕЙ ===== */
   .overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
     display: none; align-items: center; justify-content: center; z-index: 100;
   }
   .overlay.show { display: flex; }
   .overlay-card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    padding: 32px; text-align: center; max-width: 320px; width: 90%;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 32px; text-align: center;
+    max-width: 320px; width: 90%; box-shadow: 0 10px 30px var(--shadow);
   }
-  .overlay-card h2 { font-size: 22px; margin-bottom: 8px; }
-  .overlay-card p { color: var(--muted); margin-bottom: 20px; }
+  .overlay-card h2 { font-size: 24px; margin-bottom: 8px; }
+  .overlay-card p { color: var(--muted); margin-bottom: 24px; }
 
-  .battle-layout { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
-  @media (max-width: 760px) { .battle-layout { gap: 16px; } }
+  /* ===== СПИННЕР ===== */
+  .spinner {
+    width: 24px; height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Адаптив для мобилок */
+  @media (max-width: 500px) {
+    :root { --cell: 6.5vw; }
+    .header h1 { font-size: 16px; }
+  }
 </style>
 </head>
 <body>
 <div class="app">
-  <h1>МОРСКОЙ БОЙ // ОНЛАЙН</h1>
+  <div class="header">
+    <h1>Морской бой // Онлайн</h1>
+    <button class="theme-toggle" id="themeToggle" title="Переключить тему">🌙</button>
+  </div>
 
   <!-- ЭКРАН 1: ЛОББИ -->
   <div id="screen-lobby" class="screen active">
-    <div class="lobby-card" id="lobbyStart">
+    <div class="card" id="lobbyStart">
       <h2>Онлайн-игра</h2>
       <p>Создайте игру или присоединитесь по коду.</p>
       <button class="btn primary" id="btnCreate">Создать игру</button>
-      <div style="border-top: 1px solid var(--line); margin: 8px 0;"></div>
+      <div style="border-top: 1px solid var(--border); margin: 8px 0;"></div>
       <div class="input-group">
         <input type="text" id="joinInput" placeholder="КОД" maxlength="6" />
         <button class="btn" id="btnJoin">Войти</button>
       </div>
     </div>
-    <div class="lobby-card" id="lobbyHost" style="display: none;">
+    <div class="card" id="lobbyHost" style="display: none;">
       <h2>Игра создана</h2>
       <p>Передайте этот код другу:</p>
-      <div style="font-size: 28px; font-weight: 800; letter-spacing: 4px; color: var(--accent);" id="hostId">------</div>
+      <div style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: var(--text);" id="hostId">------</div>
       <p style="font-size: 12px;">Ожидание подключения...</p>
-      <div class="spinner" style="width: 24px; height: 24px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+      <div class="spinner"></div>
     </div>
   </div>
 
@@ -124,7 +305,7 @@
       <div class="board" id="setupBoard"></div>
     </div>
     <div class="fleet-list" id="fleetList"></div>
-    <div class="controls">
+    <div class="controls" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
       <button class="btn" id="btnRotate">Повернуть (R)</button>
       <button class="btn" id="btnClear">Очистить</button>
       <button class="btn primary" id="btnReady" disabled>Готов</button>
@@ -136,7 +317,7 @@
 
   <!-- ЭКРАН 3: БОЙ -->
   <div id="screen-battle" class="screen">
-    <div style="font-size: 15px; font-weight: 700; color: var(--accent);" id="turnText">Ожидание...</div>
+    <div style="font-size: 16px; font-weight: 800; text-transform: uppercase;" id="turnText">Ожидание...</div>
     <div class="battle-layout">
       <div class="board-wrap">
         <div class="board-title enemy">Флот противника</div>
@@ -168,6 +349,20 @@ const FLEET_DEF = [
   { size: 2, count: 3 },
   { size: 1, count: 4 }
 ];
+
+// Ваш сервер на Render
+const PEER_CONFIG = {
+  host: 'sea-battle-peer-server.onrender.com',
+  port: 443,
+  path: '/peerjs',
+  secure: true,
+  config: {
+    'iceServers': [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  }
+};
 
 // ===== СОСТОЯНИЕ =====
 let peer = null;
@@ -250,39 +445,40 @@ function renderBoard(container, board, shots, showShips) {
       if (shots) {
         if (shots[r][c] === 1) cell.classList.add('miss');
         if (shots[r][c] === 2) cell.classList.add('hit');
+        if (shots[r][c] === 2 && board && board[r][c] === 1) cell.classList.add('sunk');
       }
       container.appendChild(cell);
     }
   }
 }
 
-// ===== ОНЛАЙН =====
+// ===== ОНЛАЙН (PeerJS) =====
 function createGame() {
   const id = Math.random().toString(36).substring(2, 8).toUpperCase();
-  peer = new Peer(id);
+  peer = new Peer(id, PEER_CONFIG);
   peer.on('open', (id) => {
     isHost = true;
     document.getElementById('hostId').textContent = id;
     document.getElementById('lobbyStart').style.display = 'none';
-    document.getElementById('lobbyHost').style.display = 'block';
+    document.getElementById('lobbyHost').style.display = 'flex';
   });
   peer.on('connection', (connection) => {
     conn = connection;
     setupConnection();
   });
   peer.on('error', (err) => {
-    alert('Ошибка подключения: ' + err.type);
+    alert('Ошибка подключения: ' + err.type + '\nПопробуйте создать игру ещё раз.');
   });
 }
 
 function joinGame(hostId) {
-  peer = new Peer();
+  peer = new Peer(null, PEER_CONFIG);
   peer.on('open', () => {
     conn = peer.connect(hostId);
     setupConnection();
   });
   peer.on('error', (err) => {
-    alert('Ошибка подключения: ' + err.type);
+    alert('Ошибка подключения: ' + err.type + '\nПроверьте код и попробуйте снова.');
   });
 }
 
@@ -294,7 +490,7 @@ function setupConnection() {
   });
   conn.on('data', (data) => handleMessage(data));
   conn.on('close', () => {
-    alert('Соединение потеряно');
+    alert('Соединение с противником потеряно.');
     location.reload();
   });
 }
@@ -330,6 +526,7 @@ function initSetup() {
   phase = 'setup';
   renderSetupBoard();
   updateSetupUI();
+  renderFleetList();
 }
 
 function renderSetupBoard() {
@@ -407,12 +604,12 @@ function checkStartBattle() {
 }
 
 function renderBattle() {
-  // Свое поле — показываем корабли и выстрелы противника
+  // Свое поле
   const myBoardEl = document.getElementById('myBoard');
   renderBoard(myBoardEl, myBoard, myShots, true);
   myBoardEl.querySelectorAll('.cell').forEach(c => c.classList.add('disabled'));
 
-  // Поле противника — скрываем корабли, показываем свои выстрелы
+  // Поле противника
   const enemyBoardEl = document.getElementById('enemyBoard');
   renderBoard(enemyBoardEl, null, enemyShots, false);
   enemyBoardEl.onclick = (e) => {
@@ -422,12 +619,16 @@ function renderBattle() {
     const r = parseInt(cell.dataset.r);
     const c = parseInt(cell.dataset.c);
     if (enemyShots[r][c] !== 0) return;
+
+    // Отправляем выстрел
     send({ type: 'shot', r, c });
     isMyTurn = false;
     updateTurnUI();
-    // Блокируем клики до ответа
     enemyBoardEl.style.pointerEvents = 'none';
   };
+  
+  if (isMyTurn) enemyBoardEl.style.pointerEvents = 'auto';
+  else enemyBoardEl.style.pointerEvents = 'none';
 }
 
 function handleIncomingShot(r, c) {
@@ -462,7 +663,6 @@ function handleShotResult(msg) {
   const { r, c, hit, sunk, gameOver } = msg;
   enemyShots[r][c] = hit ? 2 : 1;
   renderBattle();
-  document.getElementById('enemyBoard').style.pointerEvents = 'auto';
 
   if (gameOver) {
     phase = 'gameover';
@@ -476,6 +676,9 @@ function handleShotResult(msg) {
     isMyTurn = false;
   }
   updateTurnUI();
+  
+  if (isMyTurn) document.getElementById('enemyBoard').style.pointerEvents = 'auto';
+  else document.getElementById('enemyBoard').style.pointerEvents = 'none';
 }
 
 function updateTurnUI() {
@@ -485,7 +688,7 @@ function updateTurnUI() {
     return;
   }
   el.textContent = isMyTurn ? 'Твой ход' : 'Ход противника';
-  el.style.color = isMyTurn ? '#2f81f7' : '#f0883e';
+  el.style.color = isMyTurn ? 'var(--text)' : 'var(--muted)';
 }
 
 function showWin(iWon) {
@@ -494,8 +697,22 @@ function showWin(iWon) {
   document.getElementById('winDesc').textContent = iWon ? 'Вы уничтожили флот противника.' : 'Ваш флот уничтожен.';
 }
 
-// ===== ИНИЦИАЛИЗАЦИЯ =====
+// ===== ИНИЦИАЛИЗАЦИЯ И ТЕМА =====
 document.addEventListener('DOMContentLoaded', () => {
+  // Инициализация темы
+  const themeToggle = document.getElementById('themeToggle');
+  const currentTheme = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+  themeToggle.textContent = currentTheme === 'light' ? '🌙' : '☀️';
+
+  themeToggle.onclick = () => {
+    const newTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    themeToggle.textContent = newTheme === 'light' ? '🌙' : '☀️';
+  };
+
+  // Обработчики кнопок
   document.getElementById('btnCreate').onclick = createGame;
   document.getElementById('btnJoin').onclick = () => {
     const id = document.getElementById('joinInput').value.trim().toUpperCase();
@@ -527,8 +744,6 @@ document.addEventListener('DOMContentLoaded', () => {
       setupOrientation = setupOrientation === 'h' ? 'v' : 'h';
     }
   });
-
-  renderFleetList();
 });
 </script>
 </body>
