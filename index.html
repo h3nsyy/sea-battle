@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Морской бой</title>
-<!-- Подключаем тексты -->
-<script src="lang.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 <style>
   /* ===== ТЕМЫ (Черная / Белая) ===== */
@@ -273,7 +271,7 @@
 <div class="app">
   <div class="header">
     <h1 id="txtTitle"></h1>
-    <button class="theme-toggle" id="themeToggle" title="Переключить тему">🌙</button>
+    <button class="theme-toggle" id="themeToggle" title="Тема">🌙</button>
   </div>
 
   <!-- ЭКРАН 1: ЛОББИ -->
@@ -338,6 +336,49 @@
 </div>
 
 <script>
+// ===== ТЕКСТЫ (Ваш вариант) =====
+const LANG = {
+  // Лобби
+  title: "морской бой",
+  lobbyTitle: "ыжыцйъъ",
+  lobbyDesc: "создай игру или зайди по коду",
+  btnCreate: "создать игру",
+  btnJoin: "войти",
+  inputPlaceholder: "код",
+  hostTitle: "игра создана",
+  hostDesc: "кинь этот код:",
+  hostWait: "ожидание подключения...",
+  
+  // Расстановка
+  setupTitle: "твоя расстановка",
+  btnRotate: "повернуть (r)",
+  btnClear: "очистить",
+  btnReady: "готов",
+  setupHint: "кликай по полю, чтобы ставить корабли. нажми r или кнопку, чтобы повернуть",
+  
+  // Бой
+  battleEnemy: "флот противника",
+  battleMy: "твой флот",
+  turnWait: "ожидание...",
+  turnMine: "твой ход",
+  turnEnemy: "ход противника",
+  turnEnd: "игра окончена",
+  
+  // Оверлей (Конец игры)
+  winTitle: "победа",
+  winDesc: "ты уничтожила флот противника",
+  loseTitle: "поражение",
+  loseDesc: "твой флот уничтожен.",
+  btnRestart: "играть снова",
+  
+  // Системные сообщения (алерты)
+  alertErrorType: "ошибка подключения: ",
+  alertCreateAgain: "\nпопробуй создать игру ещё раз",
+  alertCheckCode: "\nпроверь код и попробуй снова",
+  alertDisconnect: "соединение с противником потеряно",
+  alert6Digits: "введи код"
+};
+
 // ===== КОНСТАНТЫ =====
 const BOARD_SIZE = 10;
 const FLEET_DEF = [
@@ -376,7 +417,7 @@ let setupOrientation = 'h';
 let ready = false;
 let enemyReady = false;
 
-// ===== ПРИМЕНЕНИЕ ТЕКСТОВ ИЗ LANG.JS =====
+// ===== ПРИМЕНЕНИЕ ТЕКСТОВ =====
 function applyTexts() {
   document.title = LANG.title;
   document.getElementById('txtTitle').textContent = LANG.title;
@@ -475,7 +516,7 @@ function renderBoard(container, board, shots, showShips) {
   }
 }
 
-// ===== ОНЛАЙН =====
+// ===== ОНЛАЙН (PeerJS) =====
 function createGame() {
   const id = Math.random().toString(36).substring(2, 8).toUpperCase();
   peer = new Peer(id, PEER_CONFIG);
@@ -716,10 +757,10 @@ function showWin(iWon) {
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 document.addEventListener('DOMContentLoaded', () => {
-  // Применяем тексты
+  // Внедряем текст на страницу
   applyTexts();
 
-  // Тема
+  // Инициализация темы
   const themeToggle = document.getElementById('themeToggle');
   const currentTheme = localStorage.getItem('theme') || 'light';
   document.documentElement.setAttribute('data-theme', currentTheme);
@@ -732,7 +773,7 @@ document.addEventListener('DOMContentLoaded', () => {
     themeToggle.textContent = newTheme === 'light' ? '🌙' : '☀️';
   };
 
-  // События
+  // Обработчики
   document.getElementById('btnCreate').onclick = createGame;
   document.getElementById('btnJoin').onclick = () => {
     const id = document.getElementById('joinInput').value.trim().toUpperCase();
