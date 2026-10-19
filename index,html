@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Морской бой — Онлайн</title>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0f1a; --panel: #111b2b; --line: #22364d; --text: #c9d9ec;
+    --muted: #5c7a99; --accent: #2f81f7; --hit: #e34c4c;
+    --cell: clamp(18px, 5.5vw, 30px); --lab: 16px; --gap: 2px;
+  }
+  body {
+    background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif;
+    display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 16px;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+  }
+  .app { width: 100%; max-width: 880px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  h1 { font-size: 20px; color: var(--accent); letter-spacing: 1px; text-align: center; }
+  .screen { display: none; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
+  .screen.active { display: flex; }
+
+  .board-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .board-title { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; }
+  .board-title.enemy { color: #f0883e; }
+
+  .board {
+    display: grid; grid-template-columns: var(--lab) repeat(10, var(--cell));
+    grid-template-rows: var(--lab) repeat(10, var(--cell)); gap: var(--gap);
+    background: #0d1622; padding: 6px; border-radius: 8px; border: 1px solid var(--line);
+  }
+  .label { display: flex; align-items: center; justify-content: center; font-size: 10px; color: #3e5a73; font-weight: 700; }
+  .cell { background: #162435; border-radius: 2px; cursor: pointer; position: relative; transition: background 0.1s; }
+  .cell:hover:not(.miss):not(.hit):not(.sunk) { background: #1e3147; }
+  .cell.ship { background: #2f81f7; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+  .cell.ship.sunk { background: #7a2424; }
+  .cell.miss::after { content: ''; position: absolute; inset: 35%; background: #3d5d7a; border-radius: 50%; }
+  .cell.hit::after { content: ''; position: absolute; inset: 25%; background: var(--hit); border-radius: 50%; box-shadow: 0 0 6px var(--hit); }
+  .cell.disabled { pointer-events: none; opacity: 0.6; }
+
+  .fleet-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+  .fleet-item { display: flex; gap: 2px; align-items: center; padding: 4px 8px; border-radius: 4px; background: var(--panel); border: 1px solid transparent; opacity: 0.4; }
+  .fleet-item.current { opacity: 1; border-color: var(--accent); background: #1a2d45; }
+  .fleet-item .dot { width: 10px; height: 10px; background: #2f81f7; border-radius: 1px; }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .btn {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+  }
+  .btn:hover:not(:disabled) { background: #1c2e45; }
+  .btn:active:not(:disabled) { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover:not(:disabled) { background: #1f6cd8; }
+
+  .lobby-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 32px 24px; text-align: center; display: flex; flex-direction: column; gap: 16px; max-width: 340px; width: 100%;
+  }
+  .lobby-card h2 { font-size: 20px; }
+  .lobby-card p { color: var(--muted); font-size: 14px; line-height: 1.4; }
+  .input-group { display: flex; gap: 8px; }
+  .input-group input {
+    flex: 1; background: #0d1622; border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 12px; color: var(--text); font-size: 16px; text-align: center; text-transform: uppercase;
+  }
+  .input-group input:focus { outline: none; border-color: var(--accent); }
+
+  .pass-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 32px 24px; text-align: center; display: flex; flex-direction: column; gap: 16px; max-width: 340px; width: 100%;
+  }
+  .pass-card h2 { font-size: 20px; }
+  .pass-card p { color: var(--muted); font-size: 14px; line-height: 1.4; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .overlay.show { display: flex; }
+  .overlay-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 32px; text-align: center; max-width: 320px; width: 90%;
+  }
+  .overlay-card h2 { font-size: 22px; margin-bottom: 8px; }
+  .overlay-card p { color: var(--muted); margin-bottom: 20px; }
+
+  .battle-layout { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+  @media (max-width: 760px) { .battle-layout { gap: 16px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>МОРСКОЙ БОЙ // ОНЛАЙН</h1>
+
+  <!-- ЭКРАН 1: ЛОББИ -->
+  <div id="screen-lobby" class="screen active">
+    <div class="lobby-card" id="lobbyStart">
+      <h2>Онлайн-игра</h2>
+      <p>Создайте игру или присоединитесь по коду.</p>
+      <button class="btn primary" id="btnCreate">Создать игру</button>
+      <div style="border-top: 1px solid var(--line); margin: 8px 0;"></div>
+      <div class="input-group">
+        <input type="text" id="joinInput" placeholder="КОД" maxlength="6" />
+        <button class="btn" id="btnJoin">Войти</button>
+      </div>
+    </div>
+    <div class="lobby-card" id="lobbyHost" style="display: none;">
+      <h2>Игра создана</h2>
+      <p>Передайте этот код другу:</p>
+      <div style="font-size: 28px; font-weight: 800; letter-spacing: 4px; color: var(--accent);" id="hostId">------</div>
+      <p style="font-size: 12px;">Ожидание подключения...</p>
+      <div class="spinner" style="width: 24px; height: 24px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+    </div>
+  </div>
+
+  <!-- ЭКРАН 2: РАССТАНОВКА -->
+  <div id="screen-setup" class="screen">
+    <div class="board-wrap">
+      <div class="board-title">Ваша расстановка</div>
+      <div class="board" id="setupBoard"></div>
+    </div>
+    <div class="fleet-list" id="fleetList"></div>
+    <div class="controls">
+      <button class="btn" id="btnRotate">Повернуть (R)</button>
+      <button class="btn" id="btnClear">Очистить</button>
+      <button class="btn primary" id="btnReady" disabled>Готов</button>
+    </div>
+    <p style="color: var(--muted); font-size: 13px; text-align: center; max-width: 400px;">
+      Кликай по полю, чтобы ставить корабли. Нажми R или кнопку, чтобы повернуть.
+    </p>
+  </div>
+
+  <!-- ЭКРАН 3: БОЙ -->
+  <div id="screen-battle" class="screen">
+    <div style="font-size: 15px; font-weight: 700; color: var(--accent);" id="turnText">Ожидание...</div>
+    <div class="battle-layout">
+      <div class="board-wrap">
+        <div class="board-title enemy">Флот противника</div>
+        <div class="board" id="enemyBoard"></div>
+      </div>
+      <div class="board-wrap">
+        <div class="board-title">Твой флот</div>
+        <div class="board" id="myBoard"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ОВЕРЛЕЙ ПОБЕДЫ -->
+  <div class="overlay" id="overlayWin">
+    <div class="overlay-card">
+      <h2 id="winTitle">Победа!</h2>
+      <p id="winDesc">Вы уничтожили флот противника.</p>
+      <button class="btn primary" onclick="location.reload()">Играть снова</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== КОНСТАНТЫ =====
+const BOARD_SIZE = 10;
+const FLEET_DEF = [
+  { size: 4, count: 1 },
+  { size: 3, count: 2 },
+  { size: 2, count: 3 },
+  { size: 1, count: 4 }
+];
+
+// ===== СОСТОЯНИЕ =====
+let peer = null;
+let conn = null;
+let isHost = false;
+
+let myBoard = [];
+let myShips = [];
+let enemyShots = []; // 0 - пусто, 1 - промах, 2 - попадание
+let myShots = [];
+
+let phase = 'lobby'; // lobby | setup | battle | gameover
+let isMyTurn = false;
+let setupOrientation = 'h';
+let ready = false;
+let enemyReady = false;
+
+// ===== УТИЛИТЫ =====
+function createBoard() {
+  return Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(0));
+}
+
+function canPlaceShip(board, r, c, size, orientation) {
+  if (orientation === 'h') {
+    if (c + size > BOARD_SIZE) return false;
+    for (let i = 0; i < size; i++) if (board[r][c + i] !== 0) return false;
+    for (let i = -1; i <= size; i++) {
+      for (let j = -1; j <= 1; j++) {
+        const nr = r + j, nc = c + i;
+        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === 1) return false;
+      }
+    }
+    return true;
+  } else {
+    if (r + size > BOARD_SIZE) return false;
+    for (let i = 0; i < size; i++) if (board[r + i][c] !== 0) return false;
+    for (let i = -1; i <= size; i++) {
+      for (let j = -1; j <= 1; j++) {
+        const nr = r + i, nc = c + j;
+        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === 1) return false;
+      }
+    }
+    return true;
+  }
+}
+
+function placeShip(board, r, c, size, orientation) {
+  const coords = [];
+  if (orientation === 'h') {
+    for (let i = 0; i < size; i++) { board[r][c + i] = 1; coords.push([r, c + i]); }
+  } else {
+    for (let i = 0; i < size; i++) { board[r + i][c] = 1; coords.push([r + i, c]); }
+  }
+  return coords;
+}
+
+// ===== РЕНДЕР ПОЛЯ =====
+function renderBoard(container, board, shots, showShips) {
+  container.innerHTML = '';
+  const corner = document.createElement('div');
+  corner.className = 'label';
+  container.appendChild(corner);
+  for (let c = 0; c < BOARD_SIZE; c++) {
+    const cell = document.createElement('div');
+    cell.className = 'label';
+    cell.textContent = String.fromCharCode(65 + c);
+    container.appendChild(cell);
+  }
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    const rowLabel = document.createElement('div');
+    rowLabel.className = 'label';
+    rowLabel.textContent = r + 1;
+    container.appendChild(rowLabel);
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      if (showShips && board && board[r][c] === 1) cell.classList.add('ship');
+      if (shots) {
+        if (shots[r][c] === 1) cell.classList.add('miss');
+        if (shots[r][c] === 2) cell.classList.add('hit');
+      }
+      container.appendChild(cell);
+    }
+  }
+}
+
+// ===== ОНЛАЙН =====
+function createGame() {
+  const id = Math.random().toString(36).substring(2, 8).toUpperCase();
+  peer = new Peer(id);
+  peer.on('open', (id) => {
+    isHost = true;
+    document.getElementById('hostId').textContent = id;
+    document.getElementById('lobbyStart').style.display = 'none';
+    document.getElementById('lobbyHost').style.display = 'block';
+  });
+  peer.on('connection', (connection) => {
+    conn = connection;
+    setupConnection();
+  });
+  peer.on('error', (err) => {
+    alert('Ошибка подключения: ' + err.type);
+  });
+}
+
+function joinGame(hostId) {
+  peer = new Peer();
+  peer.on('open', () => {
+    conn = peer.connect(hostId);
+    setupConnection();
+  });
+  peer.on('error', (err) => {
+    alert('Ошибка подключения: ' + err.type);
+  });
+}
+
+function setupConnection() {
+  conn.on('open', () => {
+    document.getElementById('screen-lobby').classList.remove('active');
+    document.getElementById('screen-setup').classList.add('active');
+    initSetup();
+  });
+  conn.on('data', (data) => handleMessage(data));
+  conn.on('close', () => {
+    alert('Соединение потеряно');
+    location.reload();
+  });
+}
+
+function send(msg) {
+  if (conn && conn.open) conn.send(msg);
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'ready':
+      enemyReady = true;
+      checkStartBattle();
+      break;
+    case 'shot':
+      handleIncomingShot(msg.r, msg.c);
+      break;
+    case 'shotResult':
+      handleShotResult(msg);
+      break;
+  }
+}
+
+// ===== РАССТАНОВКА =====
+function initSetup() {
+  myBoard = createBoard();
+  myShips = [];
+  enemyShots = createBoard();
+  myShots = createBoard();
+  setupOrientation = 'h';
+  ready = false;
+  enemyReady = false;
+  phase = 'setup';
+  renderSetupBoard();
+  updateSetupUI();
+}
+
+function renderSetupBoard() {
+  const boardEl = document.getElementById('setupBoard');
+  renderBoard(boardEl, myBoard, null, true);
+  boardEl.onclick = (e) => {
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    handleSetupClick(parseInt(cell.dataset.r), parseInt(cell.dataset.c));
+  };
+}
+
+function handleSetupClick(r, c) {
+  if (ready) return;
+  // Определяем следующий корабль
+  const placedSizes = myShips.map(s => s.size);
+  let targetSize = null;
+  for (const def of FLEET_DEF) {
+    const count = placedSizes.filter(s => s === def.size).length;
+    if (count < def.count) {
+      targetSize = def.size;
+      break;
+    }
+  }
+  if (!targetSize) return;
+  if (!canPlaceShip(myBoard, r, c, targetSize, setupOrientation)) return;
+  const coords = placeShip(myBoard, r, c, targetSize, setupOrientation);
+  myShips.push({ size: targetSize, coords });
+  renderSetupBoard();
+  updateSetupUI();
+  renderFleetList();
+}
+
+function updateSetupUI() {
+  const totalNeeded = FLEET_DEF.reduce((sum, d) => sum + d.count, 0);
+  const totalPlaced = myShips.length;
+  document.getElementById('btnReady').disabled = totalPlaced !== totalNeeded || ready;
+}
+
+function renderFleetList() {
+  const list = document.getElementById('fleetList');
+  list.innerHTML = '';
+  const placedCounts = [0, 0, 0, 0];
+  myShips.forEach(s => {
+    const idx = FLEET_DEF.findIndex(d => d.size === s.size);
+    if (idx !== -1) placedCounts[idx]++;
+  });
+  FLEET_DEF.forEach((def, idx) => {
+    for (let i = 0; i < def.count; i++) {
+      const item = document.createElement('div');
+      const isPlaced = i < placedCounts[idx];
+      item.className = 'fleet-item' + (isPlaced ? '' : ' current');
+      for (let j = 0; j < def.size; j++) {
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        item.appendChild(dot);
+      }
+      list.appendChild(item);
+    }
+  });
+}
+
+// ===== БОЙ =====
+function startBattle() {
+  phase = 'battle';
+  isMyTurn = isHost; // Хост ходит первым
+  document.getElementById('screen-setup').classList.remove('active');
+  document.getElementById('screen-battle').classList.add('active');
+  renderBattle();
+  updateTurnUI();
+}
+
+function checkStartBattle() {
+  if (ready && enemyReady) startBattle();
+}
+
+function renderBattle() {
+  // Свое поле — показываем корабли и выстрелы противника
+  const myBoardEl = document.getElementById('myBoard');
+  renderBoard(myBoardEl, myBoard, myShots, true);
+  myBoardEl.querySelectorAll('.cell').forEach(c => c.classList.add('disabled'));
+
+  // Поле противника — скрываем корабли, показываем свои выстрелы
+  const enemyBoardEl = document.getElementById('enemyBoard');
+  renderBoard(enemyBoardEl, null, enemyShots, false);
+  enemyBoardEl.onclick = (e) => {
+    if (!isMyTurn || phase !== 'battle') return;
+    const cell = e.target.closest('.cell');
+    if (!cell) return;
+    const r = parseInt(cell.dataset.r);
+    const c = parseInt(cell.dataset.c);
+    if (enemyShots[r][c] !== 0) return;
+    send({ type: 'shot', r, c });
+    isMyTurn = false;
+    updateTurnUI();
+    // Блокируем клики до ответа
+    enemyBoardEl.style.pointerEvents = 'none';
+  };
+}
+
+function handleIncomingShot(r, c) {
+  // Противник стреляет по моему полю
+  const hit = myBoard[r][c] === 1;
+  myShots[r][c] = hit ? 2 : 1;
+
+  let sunk = false;
+  if (hit) {
+    const ship = myShips.find(s => s.coords.some(([sr, sc]) => sr === r && sc === c));
+    if (ship) sunk = ship.coords.every(([sr, sc]) => myShots[sr][sc] === 2);
+  }
+
+  const gameOver = myShips.every(ship => ship.coords.every(([sr, sc]) => myShots[sr][sc] === 2));
+  send({ type: 'shotResult', r, c, hit, sunk, gameOver });
+  renderBattle();
+
+  if (gameOver) {
+    phase = 'gameover';
+    showWin(false);
+  } else {
+    if (!hit) {
+      isMyTurn = true;
+      updateTurnUI();
+      document.getElementById('enemyBoard').style.pointerEvents = 'auto';
+    }
+  }
+}
+
+function handleShotResult(msg) {
+  // Я стрелял, получил результат
+  const { r, c, hit, sunk, gameOver } = msg;
+  enemyShots[r][c] = hit ? 2 : 1;
+  renderBattle();
+  document.getElementById('enemyBoard').style.pointerEvents = 'auto';
+
+  if (gameOver) {
+    phase = 'gameover';
+    showWin(true);
+    return;
+  }
+
+  if (hit) {
+    isMyTurn = true;
+  } else {
+    isMyTurn = false;
+  }
+  updateTurnUI();
+}
+
+function updateTurnUI() {
+  const el = document.getElementById('turnText');
+  if (phase !== 'battle') {
+    el.textContent = 'Игра окончена';
+    return;
+  }
+  el.textContent = isMyTurn ? 'Твой ход' : 'Ход противника';
+  el.style.color = isMyTurn ? '#2f81f7' : '#f0883e';
+}
+
+function showWin(iWon) {
+  document.getElementById('overlayWin').classList.add('show');
+  document.getElementById('winTitle').textContent = iWon ? 'Победа!' : 'Поражение';
+  document.getElementById('winDesc').textContent = iWon ? 'Вы уничтожили флот противника.' : 'Ваш флот уничтожен.';
+}
+
+// ===== ИНИЦИАЛИЗАЦИЯ =====
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('btnCreate').onclick = createGame;
+  document.getElementById('btnJoin').onclick = () => {
+    const id = document.getElementById('joinInput').value.trim().toUpperCase();
+    if (id.length === 6) joinGame(id);
+    else alert('Введите 6-значный код');
+  };
+
+  document.getElementById('btnRotate').onclick = () => {
+    setupOrientation = setupOrientation === 'h' ? 'v' : 'h';
+  };
+
+  document.getElementById('btnClear').onclick = () => {
+    myBoard = createBoard();
+    myShips = [];
+    renderSetupBoard();
+    updateSetupUI();
+    renderFleetList();
+  };
+
+  document.getElementById('btnReady').onclick = () => {
+    ready = true;
+    send({ type: 'ready' });
+    document.getElementById('btnReady').disabled = true;
+    checkStartBattle();
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'r' && phase === 'setup') {
+      setupOrientation = setupOrientation === 'h' ? 'v' : 'h';
+    }
+  });
+
+  renderFleetList();
+});
+</script>
+</body>
+</html>
