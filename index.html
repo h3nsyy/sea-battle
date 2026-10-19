@@ -4,9 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Морской бой</title>
-<!-- Подключаем PeerJS для онлайна -->
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-<!-- Подключаем библиотеку для конфетти -->
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 <style>
   /* ===== ТЕМЫ (Черная / Белая) ===== */
@@ -117,7 +115,7 @@
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 32px 24px;
+    padding: 24px;
     text-align: center;
     display: flex;
     flex-direction: column;
@@ -140,10 +138,18 @@
     border-radius: 8px;
     font-size: 16px;
     text-align: center;
-    text-transform: uppercase;
     font-weight: 700;
   }
   input[type="text"]:focus { outline: none; border-color: var(--text); }
+
+  .gender-group {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .gender-group label { cursor: pointer; display: flex; align-items: center; gap: 4px; }
 
   .btn {
     background: var(--panel);
@@ -207,7 +213,6 @@
   .cell.ship { background: var(--ship); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
   .cell.ship.sunk { background: var(--hit); }
 
-  /* Подсветка корабля при наведении в режиме расстановки (для удаления) */
   #setupBoard .cell.ship:hover {
     background: var(--hit);
     opacity: 0.8;
@@ -290,13 +295,24 @@
     <div class="card" id="lobbyStart">
       <h2 id="txtLobbyTitle"></h2>
       <p id="txtLobbyDesc"></p>
-      <button class="btn primary" id="btnCreate"></button>
-      <div style="border-top: 1px solid var(--border); margin: 8px 0;"></div>
+      
+      <!-- Ввод ника и пола -->
       <div class="input-group">
-        <input type="text" id="joinInput" maxlength="6" />
+        <input type="text" id="nicknameInput" placeholder="твой ник" maxlength="15" />
+      </div>
+      <div class="gender-group">
+        <label><input type="radio" name="gender" value="m" checked> <span id="txtGenderM"></span></label>
+        <label><input type="radio" name="gender" value="f"> <span id="txtGenderF"></span></label>
+      </div>
+      <div style="border-top: 1px solid var(--border); margin: 4px 0;"></div>
+      
+      <button class="btn primary" id="btnCreate"></button>
+      <div class="input-group">
+        <input type="text" id="joinInput" placeholder="код" maxlength="6" />
         <button class="btn" id="btnJoin"></button>
       </div>
     </div>
+    
     <div class="card" id="lobbyHost" style="display: none;">
       <h2 id="txtHostTitle"></h2>
       <p id="txtHostDesc"></p>
@@ -352,28 +368,37 @@ const LANG = {
   title: "морской бой",
   lobbyTitle: "ыжыцйъъ",
   lobbyDesc: "создай игру или зайди по коду",
+  nicknamePlaceholder: "твой ник",
+  genderM: "парень",
+  genderF: "девушка",
   btnCreate: "создать игру",
   btnJoin: "войти",
   inputPlaceholder: "код",
   hostTitle: "игра создана",
   hostDesc: "кинь этот код:",
   hostWait: "ожидание подключения...",
+  
   setupTitle: "твоя расстановка",
   btnRotate: "повернуть (r)",
   btnUndo: "отменить",
   btnReady: "готов",
   setupHint: "кликай по полю, чтобы ставить корабли. нажми r или кнопку, чтобы повернуть. клик по поставленному кораблю уберет его",
+  
   battleEnemy: "флот противника",
   battleMy: "твой флот",
   turnWait: "ожидание...",
   turnMine: "твой ход",
   turnEnemy: "ход противника",
   turnEnd: "игра окончена",
+  
   winTitle: "победа",
-  winDesc: "ты уничтожила флот противника",
+  winDescM: "ты уничтожил флот противника",
+  winDescF: "ты уничтожила флот противника",
   loseTitle: "поражение",
-  loseDesc: "твой флот уничтожен.",
+  loseDescM: "ты проиграл",
+  loseDescF: "ты проиграла",
   btnRestart: "играть снова",
+  
   alertErrorType: "ошибка подключения: ",
   alertCreateAgain: "\nпопробуй создать игру ещё раз",
   alertCheckCode: "\nпроверь код и попробуй снова",
@@ -403,13 +428,16 @@ const PEER_CONFIG = {
   }
 };
 
-// Звук (файл должен лежать в той же папке)
 const yaySound = new Audio('yay.mp3');
 
 // ===== СОСТОЯНИЕ =====
 let peer = null;
 let conn = null;
 let isHost = false;
+
+let myName = 'игрок';
+let enemyName = 'противник';
+let myGender = 'm';
 
 let myBoard = [];
 let myShips = [];
@@ -428,19 +456,25 @@ function applyTexts() {
   document.getElementById('txtTitle').textContent = LANG.title;
   document.getElementById('txtLobbyTitle').textContent = LANG.lobbyTitle;
   document.getElementById('txtLobbyDesc').textContent = LANG.lobbyDesc;
+  document.getElementById('nicknameInput').placeholder = LANG.nicknamePlaceholder;
+  document.getElementById('txtGenderM').textContent = LANG.genderM;
+  document.getElementById('txtGenderF').textContent = LANG.genderF;
   document.getElementById('btnCreate').textContent = LANG.btnCreate;
   document.getElementById('btnJoin').textContent = LANG.btnJoin;
   document.getElementById('joinInput').placeholder = LANG.inputPlaceholder;
   document.getElementById('txtHostTitle').textContent = LANG.hostTitle;
   document.getElementById('txtHostDesc').textContent = LANG.hostDesc;
   document.getElementById('txtHostWait').textContent = LANG.hostWait;
+  
   document.getElementById('txtSetupTitle').textContent = LANG.setupTitle;
   document.getElementById('btnRotate').textContent = LANG.btnRotate;
   document.getElementById('btnUndo').textContent = LANG.btnUndo;
   document.getElementById('btnReady').textContent = LANG.btnReady;
   document.getElementById('txtSetupHint').textContent = LANG.setupHint;
+  
   document.getElementById('txtBattleEnemy').textContent = LANG.battleEnemy;
   document.getElementById('txtBattleMy').textContent = LANG.battleMy;
+  
   document.getElementById('btnRestart').textContent = LANG.btnRestart;
 }
 
@@ -493,7 +527,7 @@ function markSurroundingAsMiss(shipCoords, shots) {
         const nr = r + dr, nc = c + dc;
         if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
           if (!shipSet.has(`${nr},${nc}`) && shots[nr][nc] === 0) {
-            shots[nr][nc] = 1; // Помечаем как промах
+            shots[nr][nc] = 1;
           }
         }
       }
@@ -501,17 +535,13 @@ function markSurroundingAsMiss(shipCoords, shots) {
   }
 }
 
-// Находит все клетки потопленного корабля (для вражеского поля)
 function getSunkShipCells(r, c, shots) {
   const queue = [[r, c]];
   const visited = new Set([`${r},${c}`]);
   const cells = [];
-  
   while (queue.length > 0) {
     const [cr, cc] = queue.shift();
     cells.push([cr, cc]);
-    
-    // Ищем только по вертикали и горизонтали
     const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
     for (const [dr, dc] of dirs) {
       const nr = cr + dr, nc = cc + dc;
@@ -526,14 +556,12 @@ function getSunkShipCells(r, c, shots) {
   return cells;
 }
 
-// ===== ЭФФЕКТ ПОТОПЛЕНИЯ (ЗВУК + КОНФЕТТИ) =====
+// ===== ЭФФЕКТ ПОТОПЛЕНИЯ =====
 function playSinkEffect(shipSize) {
-  // Звук: 1 палуба -> 0.25 громкости, 4 палубы -> 1.0
   yaySound.volume = shipSize * 0.25;
   yaySound.currentTime = 0;
   yaySound.play().catch(e => console.log('Audio error:', e));
 
-  // Конфетти: 1 палуба -> 40 частиц, 4 палубы -> 160
   const particleCount = shipSize * 40;
   const spread = 50 + shipSize * 15;
   confetti({
@@ -582,7 +610,18 @@ function renderBoard(container, board, shots, showShips) {
 }
 
 // ===== ОНЛАЙН (PeerJS) =====
+function getProfile() {
+  let name = document.getElementById('nicknameInput').value.trim();
+  if (!name) name = 'игрок';
+  const gender = document.querySelector('input[name="gender"]:checked').value;
+  return { name, gender };
+}
+
 function createGame() {
+  const profile = getProfile();
+  myName = profile.name;
+  myGender = profile.gender;
+  
   const id = Math.random().toString(36).substring(2, 8).toUpperCase();
   peer = new Peer(id, PEER_CONFIG);
   peer.on('open', (id) => {
@@ -599,6 +638,10 @@ function createGame() {
 }
 
 function joinGame(hostId) {
+  const profile = getProfile();
+  myName = profile.name;
+  myGender = profile.gender;
+
   peer = new Peer(null, PEER_CONFIG);
   peer.on('open', () => {
     conn = peer.connect(hostId);
@@ -609,6 +652,9 @@ function joinGame(hostId) {
 
 function setupConnection() {
   conn.on('open', () => {
+    // Отправляем свой профиль как только соединение установлено
+    send({ type: 'profile', name: myName, gender: myGender });
+    
     document.getElementById('screen-lobby').classList.remove('active');
     document.getElementById('screen-setup').classList.add('active');
     initSetup();
@@ -626,6 +672,11 @@ function send(msg) {
 
 function handleMessage(msg) {
   switch (msg.type) {
+    case 'profile':
+      enemyName = msg.name;
+      // Если игра уже началась, обновляем текст
+      if (phase === 'battle') updateTurnUI();
+      break;
     case 'ready':
       enemyReady = true;
       checkStartBattle();
@@ -656,8 +707,6 @@ function initSetup() {
 function renderSetupBoard() {
   const boardEl = document.getElementById('setupBoard');
   
-  // Важно: мы каждый раз пересобираем myBoard с нуля на основе myShips, 
-  // чтобы исключить любые баги с "зависшими" клетками после отмены.
   myBoard = createBoard();
   myShips.forEach(ship => {
     ship.coords.forEach(([r, c]) => {
@@ -676,7 +725,6 @@ function renderSetupBoard() {
 function handleSetupClick(r, c) {
   if (ready) return;
 
-  // Если кликнули по кораблю - удаляем его
   const shipIndex = myShips.findIndex(s => s.coords.some(([sr, sc]) => sr === r && sc === c));
   if (shipIndex !== -1) {
     myShips.splice(shipIndex, 1);
@@ -686,7 +734,6 @@ function handleSetupClick(r, c) {
     return;
   }
 
-  // Ищем следующий доступный корабль для постановки
   const placedSizes = myShips.map(s => s.size);
   let targetSize = null;
   for (const def of FLEET_DEF) {
@@ -783,8 +830,8 @@ function handleIncomingShot(r, c) {
     const ship = myShips.find(s => s.coords.some(([sr, sc]) => sr === r && sc === c));
     if (ship && ship.coords.every(([sr, sc]) => myShots[sr][sc] === 2)) {
       sunk = true;
-      markSurroundingAsMiss(ship.coords, myShots); // Автообводка
-      playSinkEffect(ship.size);                   // Конфетти + звук
+      markSurroundingAsMiss(ship.coords, myShots);
+      playSinkEffect(ship.size);
     }
   }
 
@@ -809,10 +856,9 @@ function handleShotResult(msg) {
   enemyShots[r][c] = hit ? 2 : 1;
   
   if (hit && sunk) {
-    // Находим все клетки вражеского корабля, чтобы обвести его
     const sunkCells = getSunkShipCells(r, c, enemyShots);
     markSurroundingAsMiss(sunkCells, enemyShots);
-    playSinkEffect(sunkCells.length); // Конфетти + звук (длина = размер корабля)
+    playSinkEffect(sunkCells.length);
   }
 
   renderBattle();
@@ -836,14 +882,24 @@ function updateTurnUI() {
     el.textContent = LANG.turnEnd;
     return;
   }
-  el.textContent = isMyTurn ? LANG.turnMine : LANG.turnEnemy;
+  if (isMyTurn) {
+    el.textContent = `${myName}, твой ход`;
+  } else {
+    el.textContent = `ход ${enemyName}`;
+  }
   el.style.color = isMyTurn ? 'var(--text)' : 'var(--muted)';
 }
 
 function showWin(iWon) {
   document.getElementById('overlayWin').classList.add('show');
-  document.getElementById('winTitle').textContent = iWon ? LANG.winTitle : LANG.loseTitle;
-  document.getElementById('winDesc').textContent = iWon ? LANG.winDesc : LANG.loseDesc;
+  
+  if (iWon) {
+    document.getElementById('winTitle').textContent = LANG.winTitle;
+    document.getElementById('winDesc').textContent = myGender === 'f' ? LANG.winDescF : LANG.winDescM;
+  } else {
+    document.getElementById('winTitle').textContent = LANG.loseTitle;
+    document.getElementById('winDesc').textContent = myGender === 'f' ? LANG.loseDescF : LANG.loseDescM;
+  }
 }
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
