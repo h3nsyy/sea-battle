@@ -200,8 +200,16 @@
     transition: background 0.1s;
   }
   .cell:hover:not(.miss):not(.hit):not(.sunk) { background: var(--cell-hover); }
+  
   .cell.ship { background: var(--ship); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
   .cell.ship.sunk { background: var(--hit); }
+
+  /* Подсветка корабля при наведении в режиме расстановки (для удаления) */
+  #setupBoard .cell.ship:hover {
+    background: var(--hit);
+    opacity: 0.8;
+    cursor: pointer;
+  }
 
   .cell.miss::after {
     content: ''; position: absolute; inset: 35%;
@@ -304,7 +312,7 @@
     <div class="fleet-list" id="fleetList"></div>
     <div class="controls" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
       <button class="btn" id="btnRotate"></button>
-      <button class="btn" id="btnClear"></button>
+      <button class="btn" id="btnUndo"></button>
       <button class="btn primary" id="btnReady" disabled></button>
     </div>
     <p style="color: var(--muted); font-size: 13px; text-align: center; max-width: 400px;" id="txtSetupHint"></p>
@@ -352,9 +360,9 @@ const LANG = {
   // Расстановка
   setupTitle: "твоя расстановка",
   btnRotate: "повернуть (r)",
-  btnClear: "очистить",
+  btnUndo: "отменить",
   btnReady: "готов",
-  setupHint: "кликай по полю, чтобы ставить корабли. нажми r или кнопку, чтобы повернуть",
+  setupHint: "кликай по полю, чтобы ставить корабли. нажми r или кнопку, чтобы повернуть. клик по поставленному кораблю уберет его",
   
   // Бой
   battleEnemy: "флот противника",
@@ -434,7 +442,7 @@ function applyTexts() {
   
   document.getElementById('txtSetupTitle').textContent = LANG.setupTitle;
   document.getElementById('btnRotate').textContent = LANG.btnRotate;
-  document.getElementById('btnClear').textContent = LANG.btnClear;
+  document.getElementById('btnUndo').textContent = LANG.btnUndo;
   document.getElementById('btnReady').textContent = LANG.btnReady;
   document.getElementById('txtSetupHint').textContent = LANG.setupHint;
   
@@ -605,6 +613,27 @@ function renderSetupBoard() {
 
 function handleSetupClick(r, c) {
   if (ready) return;
+
+  // Если кликнули по уже поставленному кораблю - удаляем его
+  if (myBoard[r][c] === 1) {
+    const shipIndex = myShips.findIndex(s => s.coords.some(([sr, sc]) => sr === r && sc === c));
+    if (shipIndex !== -1) {
+      const ship = myShips[shipIndex];
+      // Очищаем клетки на поле
+      ship.coords.forEach(([sr, sc]) => {
+        myBoard[sr][sc] = 0;
+      });
+      // Удаляем из массива
+      myShips.splice(shipIndex, 1);
+      // Перерисовываем
+      renderSetupBoard();
+      updateSetupUI();
+      renderFleetList();
+      return; // Выходим, чтобы не пытаться поставить новый
+    }
+  }
+
+  // Логика постановки нового корабля
   const placedSizes = myShips.map(s => s.size);
   let targetSize = null;
   for (const def of FLEET_DEF) {
@@ -785,12 +814,17 @@ document.addEventListener('DOMContentLoaded', () => {
     setupOrientation = setupOrientation === 'h' ? 'v' : 'h';
   };
 
-  document.getElementById('btnClear').onclick = () => {
-    myBoard = createBoard();
-    myShips = [];
-    renderSetupBoard();
-    updateSetupUI();
-    renderFleetList();
+  // Кнопка "Отменить" (удаляет последний поставленный корабль)
+  document.getElementById('btnUndo').onclick = () => {
+    if (myShips.length > 0) {
+      const ship = myShips.pop();
+      ship.coords.forEach(([sr, sc]) => {
+        myBoard[sr][sc] = 0;
+      });
+      renderSetupBoard();
+      updateSetupUI();
+      renderFleetList();
+    }
   };
 
   document.getElementById('btnReady').onclick = () => {
