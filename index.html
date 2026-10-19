@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Морской бой</title>
+<!-- Подключаем PeerJS для онлайна -->
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<!-- Подключаем библиотеку для конфетти -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 <style>
   /* ===== ТЕМЫ (Черная / Белая) ===== */
   :root {
@@ -344,9 +347,8 @@
 </div>
 
 <script>
-// ===== ТЕКСТЫ (Ваш вариант) =====
+// ===== ТЕКСТЫ =====
 const LANG = {
-  // Лобби
   title: "морской бой",
   lobbyTitle: "ыжыцйъъ",
   lobbyDesc: "создай игру или зайди по коду",
@@ -356,30 +358,22 @@ const LANG = {
   hostTitle: "игра создана",
   hostDesc: "кинь этот код:",
   hostWait: "ожидание подключения...",
-  
-  // Расстановка
   setupTitle: "твоя расстановка",
   btnRotate: "повернуть (r)",
   btnUndo: "отменить",
   btnReady: "готов",
   setupHint: "кликай по полю, чтобы ставить корабли. нажми r или кнопку, чтобы повернуть. клик по поставленному кораблю уберет его",
-  
-  // Бой
   battleEnemy: "флот противника",
   battleMy: "твой флот",
   turnWait: "ожидание...",
   turnMine: "твой ход",
   turnEnemy: "ход противника",
   turnEnd: "игра окончена",
-  
-  // Оверлей (Конец игры)
   winTitle: "победа",
   winDesc: "ты уничтожила флот противника",
   loseTitle: "поражение",
   loseDesc: "твой флот уничтожен.",
   btnRestart: "играть снова",
-  
-  // Системные сообщения (алерты)
   alertErrorType: "ошибка подключения: ",
   alertCreateAgain: "\nпопробуй создать игру ещё раз",
   alertCheckCode: "\nпроверь код и попробуй снова",
@@ -409,6 +403,9 @@ const PEER_CONFIG = {
   }
 };
 
+// Звук (файл должен лежать в той же папке)
+const yaySound = new Audio('yay.mp3');
+
 // ===== СОСТОЯНИЕ =====
 let peer = null;
 let conn = null;
@@ -429,26 +426,21 @@ let enemyReady = false;
 function applyTexts() {
   document.title = LANG.title;
   document.getElementById('txtTitle').textContent = LANG.title;
-  
   document.getElementById('txtLobbyTitle').textContent = LANG.lobbyTitle;
   document.getElementById('txtLobbyDesc').textContent = LANG.lobbyDesc;
   document.getElementById('btnCreate').textContent = LANG.btnCreate;
   document.getElementById('btnJoin').textContent = LANG.btnJoin;
   document.getElementById('joinInput').placeholder = LANG.inputPlaceholder;
-  
   document.getElementById('txtHostTitle').textContent = LANG.hostTitle;
   document.getElementById('txtHostDesc').textContent = LANG.hostDesc;
   document.getElementById('txtHostWait').textContent = LANG.hostWait;
-  
   document.getElementById('txtSetupTitle').textContent = LANG.setupTitle;
   document.getElementById('btnRotate').textContent = LANG.btnRotate;
   document.getElementById('btnUndo').textContent = LANG.btnUndo;
   document.getElementById('btnReady').textContent = LANG.btnReady;
   document.getElementById('txtSetupHint').textContent = LANG.setupHint;
-  
   document.getElementById('txtBattleEnemy').textContent = LANG.battleEnemy;
   document.getElementById('txtBattleMy').textContent = LANG.battleMy;
-  
   document.getElementById('btnRestart').textContent = LANG.btnRestart;
 }
 
@@ -491,29 +483,94 @@ function placeShip(board, r, c, size, orientation) {
   return coords;
 }
 
+// ===== ЛОГИКА АВТООБВОДКИ =====
+function markSurroundingAsMiss(shipCoords, shots) {
+  const shipSet = new Set(shipCoords.map(([r, c]) => `${r},${c}`));
+  for (const [r, c] of shipCoords) {
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr, nc = c + dc;
+        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+          if (!shipSet.has(`${nr},${nc}`) && shots[nr][nc] === 0) {
+            shots[nr][nc] = 1; // Помечаем как промах
+          }
+        }
+      }
+    }
+  }
+}
+
+// Находит все клетки потопленного корабля (для вражеского поля)
+function getSunkShipCells(r, c, shots) {
+  const queue = [[r, c]];
+  const visited = new Set([`${r},${c}`]);
+  const cells = [];
+  
+  while (queue.length > 0) {
+    const [cr, cc] = queue.shift();
+    cells.push([cr, cc]);
+    
+    // Ищем только по вертикали и горизонтали
+    const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+    for (const [dr, dc] of dirs) {
+      const nr = cr + dr, nc = cc + dc;
+      if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+        if (shots[nr][nc] === 2 && !visited.has(`${nr},${nc}`)) {
+          visited.add(`${nr},${nc}`);
+          queue.push([nr, nc]);
+        }
+      }
+    }
+  }
+  return cells;
+}
+
+// ===== ЭФФЕКТ ПОТОПЛЕНИЯ (ЗВУК + КОНФЕТТИ) =====
+function playSinkEffect(shipSize) {
+  // Звук: 1 палуба -> 0.25 громкости, 4 палубы -> 1.0
+  yaySound.volume = shipSize * 0.25;
+  yaySound.currentTime = 0;
+  yaySound.play().catch(e => console.log('Audio error:', e));
+
+  // Конфетти: 1 палуба -> 40 частиц, 4 палубы -> 160
+  const particleCount = shipSize * 40;
+  const spread = 50 + shipSize * 15;
+  confetti({
+    particleCount: particleCount,
+    spread: spread,
+    origin: { y: 0.7 }
+  });
+}
+
 // ===== РЕНДЕР ПОЛЯ =====
 function renderBoard(container, board, shots, showShips) {
   container.innerHTML = '';
   const corner = document.createElement('div');
   corner.className = 'label';
   container.appendChild(corner);
+  
   for (let c = 0; c < BOARD_SIZE; c++) {
     const cell = document.createElement('div');
     cell.className = 'label';
     cell.textContent = String.fromCharCode(65 + c);
     container.appendChild(cell);
   }
+  
   for (let r = 0; r < BOARD_SIZE; r++) {
     const rowLabel = document.createElement('div');
     rowLabel.className = 'label';
     rowLabel.textContent = r + 1;
     container.appendChild(rowLabel);
+    
     for (let c = 0; c < BOARD_SIZE; c++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
       cell.dataset.r = r;
       cell.dataset.c = c;
+      
       if (showShips && board && board[r][c] === 1) cell.classList.add('ship');
+      
       if (shots) {
         if (shots[r][c] === 1) cell.classList.add('miss');
         if (shots[r][c] === 2) cell.classList.add('hit');
@@ -538,9 +595,7 @@ function createGame() {
     conn = connection;
     setupConnection();
   });
-  peer.on('error', (err) => {
-    alert(LANG.alertErrorType + err.type + LANG.alertCreateAgain);
-  });
+  peer.on('error', (err) => alert(LANG.alertErrorType + err.type + LANG.alertCreateAgain));
 }
 
 function joinGame(hostId) {
@@ -549,9 +604,7 @@ function joinGame(hostId) {
     conn = peer.connect(hostId);
     setupConnection();
   });
-  peer.on('error', (err) => {
-    alert(LANG.alertErrorType + err.type + LANG.alertCheckCode);
-  });
+  peer.on('error', (err) => alert(LANG.alertErrorType + err.type + LANG.alertCheckCode));
 }
 
 function setupConnection() {
@@ -588,7 +641,6 @@ function handleMessage(msg) {
 
 // ===== РАССТАНОВКА =====
 function initSetup() {
-  myBoard = createBoard();
   myShips = [];
   enemyShots = createBoard();
   myShots = createBoard();
@@ -603,6 +655,16 @@ function initSetup() {
 
 function renderSetupBoard() {
   const boardEl = document.getElementById('setupBoard');
+  
+  // Важно: мы каждый раз пересобираем myBoard с нуля на основе myShips, 
+  // чтобы исключить любые баги с "зависшими" клетками после отмены.
+  myBoard = createBoard();
+  myShips.forEach(ship => {
+    ship.coords.forEach(([r, c]) => {
+      myBoard[r][c] = 1;
+    });
+  });
+
   renderBoard(boardEl, myBoard, null, true);
   boardEl.onclick = (e) => {
     const cell = e.target.closest('.cell');
@@ -614,26 +676,17 @@ function renderSetupBoard() {
 function handleSetupClick(r, c) {
   if (ready) return;
 
-  // Если кликнули по уже поставленному кораблю - удаляем его
-  if (myBoard[r][c] === 1) {
-    const shipIndex = myShips.findIndex(s => s.coords.some(([sr, sc]) => sr === r && sc === c));
-    if (shipIndex !== -1) {
-      const ship = myShips[shipIndex];
-      // Очищаем клетки на поле
-      ship.coords.forEach(([sr, sc]) => {
-        myBoard[sr][sc] = 0;
-      });
-      // Удаляем из массива
-      myShips.splice(shipIndex, 1);
-      // Перерисовываем
-      renderSetupBoard();
-      updateSetupUI();
-      renderFleetList();
-      return; // Выходим, чтобы не пытаться поставить новый
-    }
+  // Если кликнули по кораблю - удаляем его
+  const shipIndex = myShips.findIndex(s => s.coords.some(([sr, sc]) => sr === r && sc === c));
+  if (shipIndex !== -1) {
+    myShips.splice(shipIndex, 1);
+    renderSetupBoard();
+    updateSetupUI();
+    renderFleetList();
+    return;
   }
 
-  // Логика постановки нового корабля
+  // Ищем следующий доступный корабль для постановки
   const placedSizes = myShips.map(s => s.size);
   let targetSize = null;
   for (const def of FLEET_DEF) {
@@ -643,8 +696,10 @@ function handleSetupClick(r, c) {
       break;
     }
   }
+  
   if (!targetSize) return;
   if (!canPlaceShip(myBoard, r, c, targetSize, setupOrientation)) return;
+  
   const coords = placeShip(myBoard, r, c, targetSize, setupOrientation);
   myShips.push({ size: targetSize, coords });
   renderSetupBoard();
@@ -654,8 +709,7 @@ function handleSetupClick(r, c) {
 
 function updateSetupUI() {
   const totalNeeded = FLEET_DEF.reduce((sum, d) => sum + d.count, 0);
-  const totalPlaced = myShips.length;
-  document.getElementById('btnReady').disabled = totalPlaced !== totalNeeded || ready;
+  document.getElementById('btnReady').disabled = myShips.length !== totalNeeded || ready;
 }
 
 function renderFleetList() {
@@ -727,7 +781,11 @@ function handleIncomingShot(r, c) {
   let sunk = false;
   if (hit) {
     const ship = myShips.find(s => s.coords.some(([sr, sc]) => sr === r && sc === c));
-    if (ship) sunk = ship.coords.every(([sr, sc]) => myShots[sr][sc] === 2);
+    if (ship && ship.coords.every(([sr, sc]) => myShots[sr][sc] === 2)) {
+      sunk = true;
+      markSurroundingAsMiss(ship.coords, myShots); // Автообводка
+      playSinkEffect(ship.size);                   // Конфетти + звук
+    }
   }
 
   const gameOver = myShips.every(ship => ship.coords.every(([sr, sc]) => myShots[sr][sc] === 2));
@@ -749,6 +807,14 @@ function handleIncomingShot(r, c) {
 function handleShotResult(msg) {
   const { r, c, hit, sunk, gameOver } = msg;
   enemyShots[r][c] = hit ? 2 : 1;
+  
+  if (hit && sunk) {
+    // Находим все клетки вражеского корабля, чтобы обвести его
+    const sunkCells = getSunkShipCells(r, c, enemyShots);
+    markSurroundingAsMiss(sunkCells, enemyShots);
+    playSinkEffect(sunkCells.length); // Конфетти + звук (длина = размер корабля)
+  }
+
   renderBattle();
 
   if (gameOver) {
@@ -757,11 +823,7 @@ function handleShotResult(msg) {
     return;
   }
 
-  if (hit) {
-    isMyTurn = true;
-  } else {
-    isMyTurn = false;
-  }
+  isMyTurn = hit;
   updateTurnUI();
   
   if (isMyTurn) document.getElementById('enemyBoard').style.pointerEvents = 'auto';
@@ -786,10 +848,8 @@ function showWin(iWon) {
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 document.addEventListener('DOMContentLoaded', () => {
-  // Внедряем текст на страницу
   applyTexts();
 
-  // Инициализация темы
   const themeToggle = document.getElementById('themeToggle');
   const currentTheme = localStorage.getItem('theme') || 'light';
   document.documentElement.setAttribute('data-theme', currentTheme);
@@ -802,7 +862,6 @@ document.addEventListener('DOMContentLoaded', () => {
     themeToggle.textContent = newTheme === 'light' ? '🌙' : '☀️';
   };
 
-  // Обработчики
   document.getElementById('btnCreate').onclick = createGame;
   document.getElementById('btnJoin').onclick = () => {
     const id = document.getElementById('joinInput').value.trim().toUpperCase();
@@ -814,13 +873,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setupOrientation = setupOrientation === 'h' ? 'v' : 'h';
   };
 
-  // Кнопка "Отменить" (удаляет последний поставленный корабль)
   document.getElementById('btnUndo').onclick = () => {
     if (myShips.length > 0) {
-      const ship = myShips.pop();
-      ship.coords.forEach(([sr, sc]) => {
-        myBoard[sr][sc] = 0;
-      });
+      myShips.pop();
       renderSetupBoard();
       updateSetupUI();
       renderFleetList();
