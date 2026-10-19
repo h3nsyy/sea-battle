@@ -296,7 +296,6 @@
       <h2 id="txtLobbyTitle"></h2>
       <p id="txtLobbyDesc"></p>
       
-      <!-- Ввод ника и пола -->
       <div class="input-group">
         <input type="text" id="nicknameInput" placeholder="твой ник" maxlength="15" />
       </div>
@@ -428,7 +427,9 @@ const PEER_CONFIG = {
   }
 };
 
+// Звуки
 const yaySound = new Audio('yay.mp3');
+const sadSound = new Audio('sad.mp3');
 
 // ===== СОСТОЯНИЕ =====
 let peer = null;
@@ -652,7 +653,6 @@ function joinGame(hostId) {
 
 function setupConnection() {
   conn.on('open', () => {
-    // Отправляем свой профиль как только соединение установлено
     send({ type: 'profile', name: myName, gender: myGender });
     
     document.getElementById('screen-lobby').classList.remove('active');
@@ -674,7 +674,6 @@ function handleMessage(msg) {
   switch (msg.type) {
     case 'profile':
       enemyName = msg.name;
-      // Если игра уже началась, обновляем текст
       if (phase === 'battle') updateTurnUI();
       break;
     case 'ready':
@@ -699,6 +698,11 @@ function initSetup() {
   ready = false;
   enemyReady = false;
   phase = 'setup';
+  
+  // Сброс кнопок на случай перезапуска
+  document.getElementById('btnUndo').disabled = false;
+  document.getElementById('btnRotate').disabled = false;
+  
   renderSetupBoard();
   updateSetupUI();
   renderFleetList();
@@ -723,7 +727,7 @@ function renderSetupBoard() {
 }
 
 function handleSetupClick(r, c) {
-  if (ready) return;
+  if (ready) return; // Если готов, нельзя менять
 
   const shipIndex = myShips.findIndex(s => s.coords.some(([sr, sc]) => sr === r && sc === c));
   if (shipIndex !== -1) {
@@ -899,6 +903,9 @@ function showWin(iWon) {
   } else {
     document.getElementById('winTitle').textContent = LANG.loseTitle;
     document.getElementById('winDesc').textContent = myGender === 'f' ? LANG.loseDescF : LANG.loseDescM;
+    // Воспроизводим звук поражения
+    sadSound.currentTime = 0;
+    sadSound.play().catch(e => console.log('Audio error:', e));
   }
 }
 
@@ -925,11 +932,14 @@ document.addEventListener('DOMContentLoaded', () => {
     else alert(LANG.alert6Digits);
   };
 
+  // Блокируем кнопки поворота и отмены после нажатия "Готов"
   document.getElementById('btnRotate').onclick = () => {
+    if (ready) return;
     setupOrientation = setupOrientation === 'h' ? 'v' : 'h';
   };
 
   document.getElementById('btnUndo').onclick = () => {
+    if (ready) return; // Запрет на отмену после готовности
     if (myShips.length > 0) {
       myShips.pop();
       renderSetupBoard();
@@ -941,14 +951,19 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnReady').onclick = () => {
     ready = true;
     send({ type: 'ready' });
+    
+    // Блокируем кнопки
     document.getElementById('btnReady').disabled = true;
+    document.getElementById('btnUndo').disabled = true;
+    document.getElementById('btnRotate').disabled = true;
+    
     checkStartBattle();
   };
 
   document.getElementById('btnRestart').onclick = () => location.reload();
 
   document.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'r' && phase === 'setup') {
+    if (e.key.toLowerCase() === 'r' && phase === 'setup' && !ready) {
       setupOrientation = setupOrientation === 'h' ? 'v' : 'h';
     }
   });
