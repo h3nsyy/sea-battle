@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Морской бой</title>
+<link rel="stylesheet" href="./style.css">
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+<script defer src="./config.js"></script>
+<script defer src="./lang.js"></script>
+<script defer src="./script.js"></script>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <h1 data-lang="title"></h1>
+    <button class="theme-toggle" id="themeToggle" data-lang-title="themeTitle">🌙</button>
+  </header>
+
+  <section id="screen-lobby" class="screen active">
+    <div class="card" id="lobbyStart">
+      <h2 data-lang="lobbyTitle"></h2>
+      <p data-lang="lobbyDesc"></p>
+      <input type="text" id="nicknameInput" data-lang-ph="nicknamePlaceholder" maxlength="15" autocomplete="off">
+      <div class="gender-group">
+        <label><input type="radio" name="gender" value="m" checked> <span data-lang="genderM"></span></label>
+        <label><input type="radio" name="gender" value="f"> <span data-lang="genderF"></span></label>
+      </div>
+      <hr>
+      <button class="btn primary" id="btnCreate" data-lang="btnCreate"></button>
+      <div class="input-group">
+        <input type="text" id="joinInput" data-lang-ph="inputPlaceholder" maxlength="6" autocomplete="off" autocapitalize="characters">
+        <button class="btn" id="btnJoin" data-lang="btnJoin"></button>
+      </div>
+      <div class="status" id="lobbyStatus" hidden><div class="spinner"></div><span id="lobbyStatusText"></span></div>
+    </div>
+
+    <div class="card" id="lobbyHost" hidden>
+      <h2 data-lang="hostTitle"></h2>
+      <p data-lang="hostDesc"></p>
+      <div class="host-code" id="hostId">------</div>
+      <p class="small" data-lang="hostWait"></p>
+      <div class="spinner"></div>
+      <button class="btn" id="btnCancelHost" data-lang="btnCancel"></button>
+    </div>
+  </section>
+
+  <section id="screen-setup" class="screen">
+    <div class="board-wrap">
+      <div class="board-title" data-lang="setupTitle"></div>
+      <div class="board" id="setupBoard"></div>
+    </div>
+    <div class="fleet-list" id="fleetList"></div>
+    <div class="controls" id="setupControls">
+      <button class="btn" id="btnRotate" data-lang="btnRotate"></button>
+      <button class="btn" id="btnUndo" data-lang="btnUndo"></button>
+      <button class="btn" id="btnRandom" data-lang="btnRandom"></button>
+      <button class="btn primary" id="btnReady" data-lang="btnReady" disabled></button>
+    </div>
+    <div class="status" id="setupWait" hidden><div class="spinner"></div><span data-lang="waitEnemy"></span></div>
+    <p class="hint" data-lang="setupHint"></p>
+  </section>
+
+  <section id="screen-battle" class="screen">
+    <div class="turn-text" id="turnText"></div>
+    <div class="battle-layout">
+      <div class="board-wrap">
+        <div class="board-title enemy" data-lang="battleEnemy"></div>
+        <div class="board" id="enemyBoard"></div>
+      </div>
+      <div class="board-wrap">
+        <div class="board-title" data-lang="battleMy"></div>
+        <div class="board" id="myBoard"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="overlay" id="overlayWin">
+  <div class="overlay-card">
+    <h2 id="winTitle"></h2>
+    <p id="winDesc"></p>
+    <button class="btn primary" id="btnRestart" data-lang="btnRestart"></button>
+    <div class="status" id="rematchWait" hidden><div class="spinner"></div><span data-lang="rematchWait"></span></div>
+  </div>
+</div>
+
+<div class="overlay" id="modal" role="alertdialog" aria-modal="true">
+  <div class="overlay-card">
+    <h2 id="modalTitle"></h2>
+    <p id="modalText"></p>
+    <button class="btn primary" id="modalBtn"></button>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+</body>
+</html>
